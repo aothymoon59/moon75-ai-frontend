@@ -220,7 +220,7 @@ export default function App() {
           <textarea
             className="input-box"
             rows={1}
-            placeholder="Ask me anything... (Enter to send)"
+            placeholder="Ask me anything..."
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
