@@ -4,19 +4,15 @@ import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import "./App.css";
+import { MODELS } from "./constants";
 
-const MODELS = [
-  { id: "openai/gpt-4o-mini", label: "GPT-4o Mini" },
-  { id: "stepfun/step-3.5-flash:free", label: "Step 3.5 Flash" },
-  { id: "nvidia/nemotron-3-super-120b-a12b:free", label: "Nemotron 3 Super" },
-  { id: "arcee-ai/trinity-large-preview:free", label: "Trinity Large" },
-];
+
 
 export default function App() {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [selectedModel, setSelectedModel] = useState(MODELS[0].id);
+  const [selectedModel, setSelectedModel] = useState(MODELS[1].id);
   const [copiedIdx, setCopiedIdx] = useState(null);
   const bottomRef = useRef(null);
 
@@ -43,7 +39,7 @@ export default function App() {
     setLoading(true);
 
     try {
-      const response = await fetch("http://localhost:3001/api/chat", {
+      const response = await fetch(import.meta.env.VITE_API_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: question, model: selectedModel }),
