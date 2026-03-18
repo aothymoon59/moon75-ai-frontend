@@ -226,7 +226,7 @@ export default function App() {
             )}
           </button>
         </form>
-        <p className="hint">Shift+Enter for new line &middot; Enter to send</p>
+        {/* <p className="hint">Shift+Enter for new line &middot; Enter to send</p> */}
       </footer>
     </div>
   );
