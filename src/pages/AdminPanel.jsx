@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import "./AdminPanel.css";
 
-const API_BASE = "http://localhost:3001/api/admin";
+const API_BASE = import.meta.env.VITE_API_URL + "/admin";
 
 export default function AdminPanel() {
   const [authenticated, setAuthenticated] = useState(false);
