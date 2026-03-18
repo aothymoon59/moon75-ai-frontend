@@ -1,13 +1,10 @@
 import { useState, useRef, useEffect } from "react";
-import { Link } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
-import "./App.css";
 import { MODELS } from "./constants";
-
-
+import "./App.css";
 
 export default function App() {
   const [input, setInput] = useState("");
@@ -16,6 +13,9 @@ export default function App() {
   const [selectedModel, setSelectedModel] = useState(MODELS[1].id);
   const [copiedIdx, setCopiedIdx] = useState(null);
   const bottomRef = useRef(null);
+
+  // ✅ Auto session ID (useRef to avoid stale closure in async streaming)
+  const sessionIdRef = useRef(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -32,9 +32,9 @@ export default function App() {
     const question = input.trim();
     if (!question || loading) return;
 
+    // Add user and AI placeholders
     const userMsg = { role: "user", text: question };
     const aiMsg = { role: "ai", text: "", streaming: true };
-
     setMessages((prev) => [...prev, userMsg, aiMsg]);
     setInput("");
     setLoading(true);
@@ -43,26 +43,43 @@ export default function App() {
       const response = await fetch(import.meta.env.VITE_API_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: question, model: selectedModel }),
+        body: JSON.stringify({ message: question, model: selectedModel, sessionId: sessionIdRef.current }),
       });
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
 
-      let reading = true;
-      while (reading) {
+      while (true) {
         const { value, done } = await reader.read();
-        if (done) { reading = false; break; }
+        if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
+        const lines = buffer.split("\n\n");
         buffer = lines.pop();
 
         for (const line of lines) {
           if (line.startsWith("data: ")) {
             try {
               const data = JSON.parse(line.slice(6));
+              // console.log("SSE event:", data);
+
+              // ✅ Always capture sessionId if present (independent of other fields)
+              if (data.sessionId && !sessionIdRef.current) {
+                sessionIdRef.current = data.sessionId;
+                // console.log("Session ID captured:", data.sessionId);
+              }
+
+              // Handle normal AI text streaming
+              if (data.text) {
+                setMessages((prev) =>
+                  prev.map((m, i) =>
+                    i === prev.length - 1 ? { ...m, text: m.text + data.text } : m
+                  )
+                );
+              }
+
+              // Done signal
               if (data.done) {
                 setMessages((prev) =>
                   prev.map((m, i) =>
@@ -70,25 +87,8 @@ export default function App() {
                   )
                 );
                 setLoading(false);
-              } else if (data.error) {
-                setMessages((prev) =>
-                  prev.map((m, i) =>
-                    i === prev.length - 1
-                      ? { ...m, text: "Error: " + data.error, streaming: false }
-                      : m
-                  )
-                );
-                setLoading(false);
-              } else if (data.text) {
-                setMessages((prev) =>
-                  prev.map((m, i) =>
-                    i === prev.length - 1
-                      ? { ...m, text: m.text + data.text }
-                      : m
-                  )
-                );
               }
-            } catch (_e) { /* skip malformed SSE lines */ }
+            } catch (_e) { /* ignore malformed SSE */ }
           }
         }
       }
@@ -113,14 +113,12 @@ export default function App() {
 
   return (
     <div className="app">
-      {/* Header */}
       <header className="header">
         <div className="header-inner">
           <div className="logo">
             <span className="logo-icon">&diams;</span>
             <span className="logo-text">Moon75 AI</span>
           </div>
-
           <div className="header-right">
             <select
               className="model-select"
@@ -132,17 +130,10 @@ export default function App() {
                 <option key={m.id} value={m.id}>{m.label}</option>
               ))}
             </select>
-            {/* <Link to="/admin" className="admin-link" title="Admin Panel">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="3" />
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-              </svg>
-            </Link> */}
           </div>
         </div>
       </header>
 
-      {/* Chat area */}
       <main className="chat-area">
         {messages.length === 0 && (
           <div className="empty-state">
@@ -155,9 +146,7 @@ export default function App() {
         <div className="messages">
           {messages.map((msg, idx) => (
             <div key={idx} className={`message-row ${msg.role}`}>
-              <div className="avatar">
-                {msg.role === "user" ? "\uD83D\uDC64" : "\u2726"}
-              </div>
+              <div className="avatar">{msg.role === "user" ? "\uD83D\uDC64" : "\u2726"}</div>
               <div className={`bubble ${msg.role}`}>
                 {msg.role === "ai" && msg.text && (
                   <button
@@ -185,19 +174,13 @@ export default function App() {
                               style={oneDark}
                               language={match[1]}
                               PreTag="div"
-                              customStyle={{
-                                borderRadius: "10px",
-                                fontSize: "0.85rem",
-                                margin: "12px 0",
-                              }}
+                              customStyle={{ borderRadius: "10px", fontSize: "0.85rem", margin: "12px 0" }}
                               {...props}
                             >
                               {String(children).replace(/\n$/, "")}
                             </SyntaxHighlighter>
                           ) : (
-                            <code className="inline-code" {...props}>
-                              {children}
-                            </code>
+                            <code className="inline-code" {...props}>{children}</code>
                           );
                         },
                       }}
@@ -216,7 +199,6 @@ export default function App() {
         </div>
       </main>
 
-      {/* Input area */}
       <footer className="input-area">
         {loading && (
           <div className="loader-bar-wrap">
@@ -233,11 +215,7 @@ export default function App() {
             onKeyDown={handleKeyDown}
             disabled={loading}
           />
-          <button
-            type="submit"
-            className="send-btn"
-            disabled={loading || !input.trim()}
-          >
+          <button type="submit" className="send-btn" disabled={loading || !input.trim()}>
             {loading ? (
               <span className="spinner" />
             ) : (
