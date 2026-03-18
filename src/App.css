@@ -466,7 +466,7 @@ body {
   outline: none;
   transition: border-color 0.2s, box-shadow 0.2s;
   min-height: 48px;
-  max-height: 400px;
+  max-height: 200px;
   overflow-y: auto;
 }
 

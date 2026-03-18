@@ -111,6 +111,15 @@ export default function App() {
     }
   };
 
+  const textareaRef = useRef(null);
+
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto"; // reset height
+      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 200) + "px";
+    }
+  }, [input]);
+
   return (
     <div className="app">
       <header className="header">
@@ -207,6 +216,7 @@ export default function App() {
         )}
         <form className="input-form" onSubmit={handleSubmit}>
           <textarea
+            ref={textareaRef}
             className="input-box"
             rows={1}
             placeholder="Ask me anything..."
@@ -226,7 +236,6 @@ export default function App() {
             )}
           </button>
         </form>
-        {/* <p className="hint">Shift+Enter for new line &middot; Enter to send</p> */}
       </footer>
     </div>
   );
