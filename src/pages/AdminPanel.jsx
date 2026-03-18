@@ -2,9 +2,14 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import "./AdminPanel.css";
 
-const API_BASE = "http://localhost:3001/api/admin/qna";
+const API_BASE = "http://localhost:3001/api/admin";
 
 export default function AdminPanel() {
+  const [authenticated, setAuthenticated] = useState(false);
+  const [secretCode, setSecretCode] = useState("");
+  const [authError, setAuthError] = useState("");
+  const [verifying, setVerifying] = useState(false);
+
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -14,9 +19,55 @@ export default function AdminPanel() {
   const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
 
+  // Check if already authenticated from session
+  useEffect(() => {
+    const saved = sessionStorage.getItem("adminSecret");
+    if (saved) {
+      setSecretCode(saved);
+      setAuthenticated(true);
+    }
+  }, []);
+
+  const authHeaders = () => ({
+    "Content-Type": "application/json",
+    "x-admin-secret": secretCode || sessionStorage.getItem("adminSecret") || "",
+  });
+
+  const handleVerify = async (e) => {
+    e.preventDefault();
+    if (!secretCode.trim()) return;
+    setVerifying(true);
+    setAuthError("");
+    try {
+      const res = await fetch(`${API_BASE}/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ secretCode: secretCode.trim() }),
+      });
+      if (res.ok) {
+        sessionStorage.setItem("adminSecret", secretCode.trim());
+        setAuthenticated(true);
+      } else {
+        setAuthError("Invalid secret code. Try again.");
+      }
+    } catch {
+      setAuthError("Connection error. Is the backend running?");
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const handleLogout = () => {
+    sessionStorage.removeItem("adminSecret");
+    setAuthenticated(false);
+    setSecretCode("");
+    setItems([]);
+  };
+
   const fetchItems = async () => {
     try {
-      const res = await fetch(API_BASE);
+      const res = await fetch(`${API_BASE}/qna`, { headers: authHeaders() });
+      if (res.status === 401) { handleLogout(); return; }
       const data = await res.json();
       setItems(data);
     } catch (err) {
@@ -27,8 +78,8 @@ export default function AdminPanel() {
   };
 
   useEffect(() => {
-    fetchItems();
-  }, []);
+    if (authenticated) fetchItems();
+  }, [authenticated]);
 
   const openAddModal = () => {
     setEditing(null);
@@ -62,10 +113,10 @@ export default function AdminPanel() {
     setSaving(true);
     try {
       const method = editing ? "PUT" : "POST";
-      const url = editing ? `${API_BASE}/${editing.id}` : API_BASE;
+      const url = editing ? `${API_BASE}/qna/${editing.id}` : `${API_BASE}/qna`;
       await fetch(url, {
         method,
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         body: JSON.stringify({ keywords: keywordList, answer: answer.trim() }),
       });
       closeModal();
@@ -79,7 +130,7 @@ export default function AdminPanel() {
 
   const handleDelete = async (id) => {
     try {
-      await fetch(`${API_BASE}/${id}`, { method: "DELETE" });
+      await fetch(`${API_BASE}/qna/${id}`, { method: "DELETE", headers: authHeaders() });
       setDeleteConfirm(null);
       await fetchItems();
     } catch (err) {
@@ -87,6 +138,43 @@ export default function AdminPanel() {
     }
   };
 
+  // ─── Access Code Gate ──
+  if (!authenticated) {
+    return (
+      <div className="admin">
+        <div className="access-gate">
+          <div className="access-card">
+            <div className="access-icon">🔒</div>
+            <h2>Admin Access</h2>
+            <p>Enter the secret code to manage custom Q&A</p>
+            <form onSubmit={handleVerify} className="access-form">
+              <input
+                type="password"
+                className="form-input access-input"
+                placeholder="Enter secret code..."
+                value={secretCode}
+                onChange={(e) => setSecretCode(e.target.value)}
+                autoFocus
+              />
+              {authError && <div className="access-error">{authError}</div>}
+              <button
+                type="submit"
+                className="admin-add-btn access-btn"
+                disabled={verifying || !secretCode.trim()}
+              >
+                {verifying ? <span className="btn-spinner" /> : "Unlock"}
+              </button>
+            </form>
+            <Link to="/" className="access-back-link">
+              ← Back to Chat
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Admin Panel ──
   return (
     <div className="admin">
       {/* Header */}
@@ -103,13 +191,22 @@ export default function AdminPanel() {
               <span className="admin-logo-text">Custom Q&A Manager</span>
             </div>
           </div>
-          <button className="admin-add-btn" onClick={openAddModal}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            Add Q&A
-          </button>
+          <div className="admin-header-actions">
+            <button className="admin-add-btn" onClick={openAddModal}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              Add Q&A
+            </button>
+            <button className="admin-logout-btn" onClick={handleLogout} title="Logout">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
+              </svg>
+            </button>
+          </div>
         </div>
       </header>
 
